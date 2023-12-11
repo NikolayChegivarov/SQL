@@ -46,11 +46,22 @@ JOIN album a ON a.album_id = t.album_id
 GROUP BY name_album
 
 --Все исполнители, которые не выпустили альбомы в 2020 году.
+ПЕРВЫЙ ВАРИАНТ
 SELECT e.name_executor
 FROM executor e
 JOIN executor_album ea ON ea.executor_id = e.executor_id
 JOIN album a ON a.album_id = ea.album_id
-WHERE year not BETWEEN 2018 AND 2020
+WHERE a.year != 2020 OR a.year IS null
+ВТОРОЙ ВАРИАНТ 
+--нужно сначала найти тех исполнителей, кто выпустил альбом в 2020 (вложенным запросом), а потом их исключить из общего списка исполнителей
+SELECT e.name_executor
+FROM executor e
+WHERE e.name_executor NOT IN  
+(SELECT e.name_executor
+FROM executor e
+JOIN executor_album ea ON ea.executor_id = e.executor_id
+JOIN album a ON a.album_id = ea.album_id
+WHERE a.year = 2020)
 
 --Названия сборников, в которых присутствует конкретный исполнитель (выберите его сами).
 SELECT DISTINCT (name_collection) DI
@@ -77,9 +88,6 @@ SELECT t.name_track
    WHERE tc.track_id IS NULL
 
 --Исполнитель или исполнители, написавшие самый короткий по продолжительности трек, — теоретически таких треков может быть несколько.
---РЕШЕНИЕ НЕ КОРЕКТНО ТАК КАК НЕРЕЛЕВАНТНА САМА СХЕМА. НУЖНА ПРЯМАЯ СВЯЗЬ МЕЖДУ ТРЕКОМ И ИСПОЛНИТЕЛЕМ, 
---ДЛЯ ЭТОГО В ТАБЛИЦЕ track НЕОБХОДИМО ДОБАВЛЕНИЕ ГРАФЫ executor_ID. В ПРОТИВНОМ СЛУЧАЕ ИСПОЛНИТЕЛИ 
---У КОТОРЫХ НЕТ АЛЬБОМА ПРОСТО НЕ ПОПАДУТ В ВЫБОРКУ.
 SELECT e.name_executor, t.duration
 FROM (
     SELECT t.track_id, t.name_track, t.duration, ea.executor_id 
@@ -90,9 +98,21 @@ FROM (
 JOIN executor e ON t.executor_id = e.executor_id
 
 --Названия альбомов, содержащих наименьшее количество треков.
-SELECT name_album, (count(t.track_id)) AS count_track
+SELECT a.name_album 
 FROM album a
-JOIN track t ON t.album_id = a.album_id  
-GROUP BY name_album
-ORDER BY count_track
-LIMIT 1
+JOIN (
+  SELECT album_id, COUNT(*) as track_count
+  FROM track
+  GROUP BY album_id
+  ORDER BY track_count ASC
+) t ON a.album_id = t.album_id
+WHERE t.track_count = (
+  SELECT MIN(track_count)
+  FROM (
+      SELECT COUNT(*) as track_count
+      FROM track
+      GROUP BY album_id
+  ) subquery
+)
+
+
